@@ -114,6 +114,27 @@ jobs:
         sudo apt-get remove -y ros-${{ matrix.ros_distro }}-behaviortree-cpp || true
         sudo apt-get remove -y ros-${{ matrix.ros_distro }}-ompl || true
 
+    - name: Add the ompl::ompl target to the system OMPL config
+      # nav2 main links ompl::ompl, but Ubuntu's OMPL 1.6 config only sets
+      # OMPL_* variables. Define the target from them, keeping only include
+      # paths that exist (the packaged list carries some from its build host).
+      run: |
+        cfg=/usr/share/ompl/cmake/omplConfig.cmake
+        grep -q 'TARGET ompl::ompl' "$cfg" || sudo tee -a "$cfg" > /dev/null <<'CMAKE'
+        if(NOT TARGET ompl::ompl)
+          set(_ompl_target_includes "")
+          foreach(_dir IN LISTS OMPL_INCLUDE_DIRS)
+            if(EXISTS "${_dir}")
+              list(APPEND _ompl_target_includes "${_dir}")
+            endif()
+          endforeach()
+          add_library(ompl::ompl INTERFACE IMPORTED)
+          set_target_properties(ompl::ompl PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${_ompl_target_includes}"
+            INTERFACE_LINK_LIBRARIES "${OMPL_LIBRARIES}")
+        endif()
+        CMAKE
+
     - name: Shim removed ament_index_cpp header
       # ament_index_cpp 1.14 removed get_package_share_directory() (header and
       # symbol); BT.CPP master and nav2 main still include it. Forward to
